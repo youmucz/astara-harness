@@ -1,0 +1,12 @@
+schema: spec-driven
+created: 2026-09-12
+goal: Add a backwards-compatible optional presentation configuration to the web
+  boot kernel (AppWebEntry/BootPage) so a host consumer can supply localized
+  loading/failure headings, plain-text bounded diagnostic labels, accessibility
+  lang/dir, and scoped CSS custom-property theme overrides without duplicating
+  theme state, adding a runtime i18n dependency, or changing default HARNESS
+  English behavior.
+affected_areas:
+  - client-web-boot
+  - web-presentation
+  - web-theming

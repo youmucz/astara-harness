@@ -1,0 +1,50 @@
+version: 1
+schema: spec-driven-worktree
+
+# Companion-owned execution declaration. The official OpenSpec parser reads only
+# schema.yaml; this adjacent file is interpreted only by the companion adapter.
+planning:
+  home: repo-local
+  storeMutation: unsupported
+
+worktree:
+  mode: required
+  artifact:
+    id: worktree
+    output: worktree.md
+  root: .worktrees
+  path: "{change}"
+  allowedPlaceholders:
+    - change
+  branch:
+    strategy: canonical-template
+    # Canonical branch template (controlled lifecycle change). It supersedes
+    # prior templates; a prior-template declaration fails closed as stale and
+    # is never rewritten, renamed, or adopted.
+    template: "openspec/{change}"
+  base:
+    strategy: explicit-ref
+    # Repository-declared explicit local base ref, provision-derived from
+    # observed local branches; repository policy may only narrow it.
+    ref: refs/heads/master
+    required: true
+
+versionControl:
+  provider: git
+  operations:
+    create: managed
+    recover: exact-only
+    remove: clean-only
+    inspect: read-only
+  safety:
+    allowForce: false
+    allowFetch: false
+    allowRawGit: false
+    allowRecursiveDelete: false
+    allowDirtyRemove: false
+
+integration:
+  mode: explicit-handoff
+  coreOpenSpecTools: unchanged
+  implicitGuard: disabled
+  mergeAndPush: separate-capability

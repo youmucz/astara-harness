@@ -3,6 +3,7 @@
  * client plugin fails because React arrives only with the UI renderer.
  * @module @deepseek-ai/dsh-client-web/src/boot-page
  */
+import { resolveBootPresentation, type ResolvedBootPresentation } from './boot-presentation.ts'
 import type { LoaderEntryState } from './loader-status.ts'
 import css from './boot-page.module.css'
 
@@ -16,6 +17,7 @@ function div(className: string | undefined, text?: string): HTMLDivElement {
 
 /** Kernel-owned page mounted below the application's root element. */
 export class BootPage {
+  private readonly presentation: ResolvedBootPresentation
   private readonly root: HTMLDivElement
   private readonly card: HTMLDivElement
   private readonly wordmark: HTMLDivElement
@@ -29,15 +31,19 @@ export class BootPage {
   /**
    * Build and attach the boot page.
    * @param container - Application mount point.
+   * @param presentation - Resolved presentation; the kernel defaults apply when
+   * a caller builds the page without one.
    */
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, presentation: ResolvedBootPresentation = resolveBootPresentation(undefined)) {
+    this.presentation = presentation
     this.root = div(css.boot)
     this.root.dataset.dshBoot = ''
+    this.applyPresentation()
     this.card = div(css.card)
-    this.wordmark = div(css.wordmark, 'HARNESS')
+    this.wordmark = div(css.wordmark, presentation.wordmark)
     this.spinner = div(css.spinner)
     this.spinner.dataset.dshBootSpinner = ''
-    this.hint = div(css.hint, 'Loading plugins…')
+    this.hint = div(css.hint, presentation.loading)
     this.card.append(this.wordmark, this.spinner, this.hint)
     this.root.append(this.card)
     container.append(this.root)
@@ -79,6 +85,20 @@ export class BootPage {
     this.root.remove()
   }
 
+  /** Apply the resolved accessibility attributes and scoped color overrides. */
+  private applyPresentation(): void {
+    if (this.presentation.lang !== undefined) this.root.setAttribute('lang', this.presentation.lang)
+    if (this.presentation.dir !== undefined) this.root.setAttribute('dir', this.presentation.dir)
+    for (const [name, value] of this.presentation.cssVariables) {
+      try {
+        this.root.style.setProperty(name, value)
+      } catch {
+        // A rejected declaration leaves this property at its stylesheet
+        // default; the remaining accepted entries still apply.
+      }
+    }
+  }
+
   /** Redraw the state-dependent content below the wordmark. */
   private render(): void {
     const failed = [...this.states].filter(([, state]) => state === 'failed').map(([id]) => id)
@@ -89,8 +109,11 @@ export class BootPage {
       return
     }
     const report = div(css.failed)
-    report.append(div(css.failedTitle, 'Failed to load plugins'))
+    report.append(div(css.failedTitle, this.presentation.failure))
     for (const id of failed) report.append(div(css.failedItem, id))
+    if (this.presentation.failureExplanation !== undefined) {
+      report.append(div(css.failedItem, this.presentation.failureExplanation))
+    }
     if (this.failure !== undefined) report.append(div(css.failedItem, this.failure))
     this.card.replaceChildren(this.wordmark, report)
   }

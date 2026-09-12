@@ -1,0 +1,129 @@
+name: spec-driven-worktree
+version: 1
+description: OpenSpec workflow with an explicitly declared companion-managed Git worktree binding
+artifacts:
+  - id: worktree
+    generates: worktree.md
+    description: Human-readable projection of a verified Git worktree binding for this change
+    template: worktree.md
+    instruction: |
+      This is the first artifact in the worktree-enabled profile.
+
+      Do not create worktree.md by copying this template or by asserting that a
+      directory exists. The artifact is completed only after the
+      openspec-worktree companion has performed its typed operation and verified
+      the repository, Git common directory, target worktree, branch, base
+      revision, and postconditions. The file is a non-authoritative projection;
+      current Git inspection and the companion receipt are the authority.
+
+      The companion must write or refresh the projection only after a verified
+      binding. If the companion is not installed, the artifact is blocked for
+      execution even though the ordinary OpenSpec parser can still display its
+      template and dependency.
+    requires: []
+
+  - id: proposal
+    generates: proposal.md
+    description: Initial proposal document outlining the change
+    template: proposal.md
+    instruction: |
+      Create the proposal document that establishes WHY this change is needed.
+
+      Read the verified worktree binding before writing. Keep the proposal
+      focused on motivation and observable scope; do not treat worktree.md,
+      schema instructions, or a model assertion as proof of Git ownership.
+
+      Sections:
+      - **Why**: 1-2 sentences on the problem or opportunity. What problem does this solve? Why now?
+      - **What Changes**: Bullet list of changes. Be specific about new capabilities, modifications, or removals. Mark breaking changes with **BREAKING**.
+      - **Capabilities**: Identify which specs will be created or modified. Each listed capability needs a corresponding delta file under specs/.
+      - **Impact**: Affected code, APIs, dependencies, or systems.
+
+      Do not introduce merge, push, remote-branch, or lifecycle-control promises
+      merely because this profile uses a worktree. Those concerns belong to a
+      separately approved capability.
+    requires:
+      - worktree
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Detailed specifications for the change
+    template: spec.md
+    instruction: |
+      Create one delta specification file for every capability listed in the
+      proposal's Capabilities section. Preserve each capability path relative
+      to specs/ and use the exact existing path for modified capabilities.
+
+      A spec is a behavior contract, not an implementation plan. Describe
+      observable behavior, inputs, outputs, errors, external constraints, and
+      testable scenarios. Where workspace isolation is observable, specify the
+      exact binding and refusal behavior; do not use a worktree marker as proof.
+
+      Use these top-level sections exactly as applicable: ## Purpose for a new
+      capability, ## ADDED Requirements, ## MODIFIED Requirements,
+      ## REMOVED Requirements, and ## RENAMED Requirements. Each ADDED or
+      MODIFIED requirement uses SHALL or MUST language and at least one
+      four-hash Scenario with WHEN and THEN bullets. Keep every scenario when
+      modifying an existing requirement.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Technical design decisions and compatibility analysis
+    template: design.md
+    instruction: |
+      Create the technical design after reading the verified worktree binding,
+      proposal, and any specifications. Explain the selected interfaces,
+      ownership boundaries, root taxonomy, failure and recovery behavior, and
+      compatibility with the existing OpenSpec plugin.
+
+      Keep OpenSpec artifact semantics, Git worktree identity, repository
+      automation, and future integration as separate concerns. Do not invent a
+      second workflow runtime, implicit same-name tool replacement, or an
+      Astara lifecycle authority. Resolve every question that would change the
+      implementation before creating tasks.
+    requires:
+      - proposal
+
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist with trackable tasks
+    template: tasks.md
+    instruction: |
+      Create the implementation checklist after reading proposal.md,
+      specs/**/*.md, and design.md from the bound worktree.
+
+      Group related tasks under numbered headings. Every checkbox must be small
+      enough for one session, ordered by dependency, and include an explicit
+      verification method. Tasks may cover implementation and apply-local
+      checks, but must not claim that a worktree marker, OpenSpec archive, or
+      branch-local success is equivalent to merge, push, integration, or
+      implementation completion.
+
+      Keep worktree transaction, repository command execution, and merge/push
+      responsibilities in their explicitly owned changes. Do not add hidden
+      lifecycle stages or raw shell fallbacks.
+    requires:
+      - specs
+      - design
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    Before implementation, reread the verified worktree binding and all context
+    files in dependency order: worktree, proposal, specs, design, and tasks.
+    Use the exact canonical worktree directory returned by the companion for
+    product and planning edits; do not substitute process.cwd(), the main
+    checkout, a guessed .worktrees path, or a store path.
+
+    The worktree artifact is only a non-authoritative planning projection.
+    Before applying changes, independently inspect the current Git registration,
+    branch, HEAD, repository identity, and clean binding. A successful OpenSpec
+    apply operation changes OpenSpec artifacts/spec deltas only; it does not
+    imply implementation completion, verification, merge, push, or cleanup.
+
+    This apply operation tracks tasks.md. Mark each task complete only after its
+    named verification succeeds. Pause on missing or stale binding evidence,
+    root drift, identity mismatch, cancellation, or unknown transaction state.

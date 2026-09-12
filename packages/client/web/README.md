@@ -37,13 +37,33 @@ Boot runs in two stages: the module stage adopts the parser-loaded bootstrap bat
 
 The boot page uses plain DOM and local CSS, so bundle and plugin-activation failures remain visible: it shows one spinner node whose CSS arc grows as entries activate, and reports per-entry status. The spinner and its animation phase persist until the full UI replaces the boot page. A plugin that fails import or activation is reported by name with the reason (missing service, import error, or state) instead of a blank page.
 
+### Presentation
+
+`AppWebEntry` takes an optional third constructor argument, `new AppWebEntry(container, seams?, presentation?)`, that localizes the loading and failure chrome and seeds the boot page's own color fallback layer before any plugin activates. The argument is typed `unknown` because it is untrusted host configuration; [`resolveBootPresentation`](src/boot-presentation.ts) reads the documented fields, resolves each one independently, and returns the closed record the boot page renders. `BootSeams` keeps its position and its `loadBundle` member, and the option is additive: without it the page renders `HARNESS`, `Loading plugins…`, and `Failed to load plugins`.
+
+| Field | Accepted input | Default |
+|---|---|---|
+| `wordmark` | non-empty trimmed string, at most 256 characters | `HARNESS` |
+| `loading` | non-empty trimmed string, at most 1024 characters | `Loading plugins…` |
+| `failure` | non-empty trimmed string, at most 1024 characters | `Failed to load plugins` |
+| `failureExplanation` | non-empty trimmed string, at most 1024 characters | absent |
+| `lang` | non-empty trimmed string, at most 35 characters | absent |
+| `dir` | exactly `ltr`, `rtl`, or `auto` | absent |
+| `cssVariables` | the six documented color names with non-empty color values of at most 256 characters | absent |
+
+Invalid, partial, or malformed input degrades field by field: an over-long string is treated as absent rather than truncated, and a configuration that is not a plain object — an array included — falls back entirely. Every presentation string is written as a text node, so no value is interpreted as markup. Loader diagnostics stay technical text: entry names, the `fail(message)` report, and the `web boot: N entries did not activate` audit text are not localizable.
+
+`cssVariables` accepts exactly the six color properties the boot page's stylesheet consumes — `--dsh-boot-bg`, `--dsh-boot-label-primary`, `--dsh-boot-label-secondary`, `--dsh-boot-label-tertiary`, `--dsh-boot-border`, and `--dsh-boot-brand` — and applies an accepted value as an inline custom property on the boot root only, after it passes both the independently-resolvable color grammar and `CSS.supports('color', value)`. Accepted values are 3-, 4-, 6-, and 8-digit hexadecimal colors; the finite CSS named-color table, including `transparent` and both `gray`/`grey` spellings; and the lowercased `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, and `color()` functions with plain numeric bodies, where `color()` is limited to the `srgb`, `srgb-linear`, `display-p3`, `a98-rgb`, `prophoto-rgb`, `rec2020`, `xyz`, `xyz-d50`, and `xyz-d65` spaces. Anything else is skipped: `currentColor`, system colors, `var()`-style references, CSS-wide keywords, angle units, `none`, exponent notation, `calc()`, nested or relative `from` syntax, escapes, and comments.
+
+The stylesheet's `var(--dsw-alias-*, var(--dsh-boot-*))` chain still decides the effective value, so a defined `--dsw-alias-*` variable wins over a supplied private property. The [host-configurable boot presentation decision](../../../.agents/notes/implemented/feature/2026-09-12-host-configurable-boot-presentation.md) owns the rationale and the boundaries.
+
 ### The shared module table
 
 `PLATFORM_MODULES` (in `src/platform.ts`) names the shell-seeded shared modules — React, Cordis, and static UI libraries — and together with `PRELOADED_CLIENT_EXTERNALS` (the parser-preloaded runtime row) defines the implicit external baseline every dynamic bundle resolves against. `dsh.client.external` adds only exact non-baseline requests; see [shared modules and the module graph](../AGENTS.md#shared-modules-and-the-module-graph).
 
 ### Configuration
 
-The package accepts no plugin config of its own; the generated [configuration catalog](../../../docs/config-catalog.md) lists every plugin config in the repo for comparison.
+The package registers no Cordis plugin config of its own; boot presentation is a constructor option described above. The generated [configuration catalog](../../../docs/config-catalog.md) lists every plugin config in the repo for comparison.
 
 -----
 
@@ -71,11 +91,12 @@ The boot page is plain DOM with local CSS whose fallback fonts and colors match 
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Library entry: `AppWebEntry`, `getStaticModules`, platform tables |
-| [`src/boot.ts`](src/boot.ts) | `AppWebEntry`: module stage, boot page, immediate-tier prefetch, then `bootClient` + `mountClient` |
+| [`src/index.ts`](src/index.ts) | Library entry: `AppWebEntry`, `BootSeams`, `BootPresentation`, `getStaticModules`, platform tables |
+| [`src/boot.ts`](src/boot.ts) | `AppWebEntry`: presentation resolution, module stage, boot page, immediate-tier prefetch, then `bootClient` + `mountClient` |
+| [`src/boot-presentation.ts`](src/boot-presentation.ts) | `resolveBootPresentation` / `BootPresentation`: bounded fields, direction, and the six accepted color properties |
 | [`src/boot-client.ts`](src/boot-client.ts) | `bootClient` / `assertEntriesActive`: Loader mount, one entry per manifest row, activation audit |
 | [`src/mount.ts`](src/mount.ts) | `mountClient`: renderer handoff through a `uiRenderer` dependency fiber |
-| [`src/boot-page.ts`](src/boot-page.ts) | Framework-free boot page: spinner, per-entry status, failure rendering |
+| [`src/boot-page.ts`](src/boot-page.ts) | Framework-free boot page: spinner, per-entry status, presentation, failure rendering |
 | [`src/platform.ts`](src/platform.ts) | `PLATFORM_MODULES` / `PRELOADED_CLIENT_EXTERNALS`: the implicit external baseline |
 | [`src/seed.ts`](src/seed.ts) | Static module table handed to the loader at boot |
 
@@ -113,6 +134,8 @@ None; this package neither assembles nor sends a provider request.
 These limits define what the boot kernel does not support. They are current package constraints, not a task backlog.
 
 - **The application waits for the full roster** — one failed entry keeps the framework-free boot page visible with a per-entry report; partial UI availability is not supported.
+- **Presentation is kernel-local configuration, not a theming API** — the kernel reads no theme or locale state, detects no dark mode, and judges no contrast; a defined `--dsw-alias-*` variable wins over a supplied private property, so the effective palette stays the consumer's responsibility.
+- **Color overrides use a conservative grammar** — only hexadecimal, named-color, and the listed function values that the engine also accepts are applied, and everything else is skipped, so an engine without support for a listed function silently keeps the stylesheet default.
 
 <a id="dev-note"></a>
 ### Dev Note

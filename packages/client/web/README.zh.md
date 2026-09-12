@@ -37,13 +37,33 @@ kind: "package-library"
 
 启动页只使用原生 DOM 与本地 CSS，因此 bundle 与插件激活失败保持可见：它显示一个 spinner 节点，其 CSS 圆弧随 entry 激活而增长，并逐 entry 报告状态。spinner 及其动画相位会一直保留，直到完整 UI 替换启动页。导入或激活失败的插件会按名称报告并给出原因（缺失服务、导入错误或状态），而不是白屏。
 
+### 展示
+
+`AppWebEntry` 接受可选的第三个构造函数参数 `new AppWebEntry(container, seams?, presentation?)`，用于在任何插件激活前本地化加载与失败界面文案，并为启动页自身的颜色回退层提供取值。该参数标注为 `unknown`，因为它是不可信的 Host 配置；[`resolveBootPresentation`](src/boot-presentation.ts) 读取文档化的字段、逐字段独立解析，并返回启动页所渲染的封闭记录。`BootSeams` 保持原有位置与 `loadBundle` 成员，该选项是增量的：不传时页面渲染 `HARNESS`、`Loading plugins…` 与 `Failed to load plugins`。
+
+| 字段 | 接受的输入 | 默认值 |
+|---|---|---|
+| `wordmark` | 去空白后非空、至多 256 字符的字符串 | `HARNESS` |
+| `loading` | 去空白后非空、至多 1024 字符的字符串 | `Loading plugins…` |
+| `failure` | 去空白后非空、至多 1024 字符的字符串 | `Failed to load plugins` |
+| `failureExplanation` | 去空白后非空、至多 1024 字符的字符串 | 缺失 |
+| `lang` | 去空白后非空、至多 35 字符的字符串 | 缺失 |
+| `dir` | 恰好为 `ltr`、`rtl` 或 `auto` | 缺失 |
+| `cssVariables` | 六个文档化颜色名称，值为非空且至多 256 字符的颜色 | 缺失 |
+
+非法、不完整或畸形的输入逐字段降级：超长字符串按缺失处理而不截断，不是普通对象（包括数组）的配置整体回退。所有展示字符串都写为文本节点，因此任何值都不会被解释为标记。loader 诊断保持技术文本：entry 名称、`fail(message)` 报告与 `web boot: N entries did not activate` 审计文本不可本地化。
+
+`cssVariables` 恰好接受启动页样式表消费的六个颜色属性——`--dsh-boot-bg`、`--dsh-boot-label-primary`、`--dsh-boot-label-secondary`、`--dsh-boot-label-tertiary`、`--dsh-boot-border` 与 `--dsh-boot-brand`——并只在值同时通过可独立解析的颜色语法与 `CSS.supports('color', value)` 后，把它作为内联自定义属性设置在启动页根元素上。接受的值是：3、4、6、8 位十六进制颜色；有限的 CSS 颜色名表，含 `transparent` 与 `gray`/`grey` 两种拼写；以及小写 `rgb()`、`rgba()`、`hsl()`、`hsla()`、`hwb()`、`lab()`、`lch()`、`oklab()`、`oklch()` 与 `color()` 函数，函数体只含普通数字，其中 `color()` 只限 `srgb`、`srgb-linear`、`display-p3`、`a98-rgb`、`prophoto-rgb`、`rec2020`、`xyz`、`xyz-d50` 与 `xyz-d65` 空间。其余一律跳过：`currentColor`、系统颜色、`var()` 之类引用、CSS 全局关键字、角度单位、`none`、指数写法、`calc()`、嵌套或相对 `from` 语法、转义与注释。
+
+样式表的 `var(--dsw-alias-*, var(--dsh-boot-*))` 链仍决定生效值，因此已定义的 `--dsw-alias-*` 变量优先于传入的私有属性。[Host 可配置的启动页展示决策](../../../.agents/notes/implemented/feature/2026-09-12-host-configurable-boot-presentation.zh.md)拥有其理由与边界。
+
 ### 共享模块表
 
 `PLATFORM_MODULES`（位于 `src/platform.ts`）列出外壳预置的共享模块——React、Cordis 与静态 UI 库——并与 `PRELOADED_CLIENT_EXTERNALS`（parser 预载的运行时行）一起定义每个动态 bundle 解析所依据的隐式 external 基座。`dsh.client.external` 只添加基座之外的精确请求；参见[共享模块与模块图](../AGENTS.md#shared-modules-and-the-module-graph)。
 
 ### 配置
 
-本包自身不接受任何插件配置；生成的[配置目录](../../../docs/config-catalog.zh.md)列出仓库中每个插件配置以供对照。
+本包不注册自身的 Cordis 插件配置；启动页展示是上文所述的构造函数选项。生成的[配置目录](../../../docs/config-catalog.zh.md)列出仓库中每个插件配置以供对照。
 
 -----
 
@@ -71,11 +91,12 @@ kind: "package-library"
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 库入口：`AppWebEntry`、`getStaticModules`、平台表 |
-| [`src/boot.ts`](src/boot.ts) | `AppWebEntry`：模块阶段、启动页、immediately 层级预取，随后调用 `bootClient` + `mountClient` |
+| [`src/index.ts`](src/index.ts) | 库入口：`AppWebEntry`、`BootSeams`、`BootPresentation`、`getStaticModules`、平台表 |
+| [`src/boot.ts`](src/boot.ts) | `AppWebEntry`：展示解析、模块阶段、启动页、immediately 层级预取，随后调用 `bootClient` + `mountClient` |
+| [`src/boot-presentation.ts`](src/boot-presentation.ts) | `resolveBootPresentation` / `BootPresentation`：有界字段、书写方向与六个被接受的颜色属性 |
 | [`src/boot-client.ts`](src/boot-client.ts) | `bootClient` / `assertEntriesActive`：挂载 Loader、每个 manifest 行一个 entry、激活审计 |
 | [`src/mount.ts`](src/mount.ts) | `mountClient`：经 `uiRenderer` 依赖 fiber 完成渲染器交接 |
-| [`src/boot-page.ts`](src/boot-page.ts) | 无框架启动页：spinner、逐 entry 状态、失败渲染 |
+| [`src/boot-page.ts`](src/boot-page.ts) | 无框架启动页：spinner、逐 entry 状态、展示与失败渲染 |
 | [`src/platform.ts`](src/platform.ts) | `PLATFORM_MODULES` / `PRELOADED_CLIENT_EXTERNALS`：隐式 external 基座 |
 | [`src/seed.ts`](src/seed.ts) | 启动时交给 loader 的静态模块表 |
 
@@ -113,6 +134,8 @@ kind: "package-library"
 这些限制说明启动内核不支持什么。它们是当前包约束，不是任务积压。
 
 - **应用会等待全部 entry 就绪**——只要一个 entry 失败，无框架启动页就会保留并逐项报告；不支持部分 UI 可用。
+- **展示是内核本地配置，不是主题 API**——内核不读取主题或 locale 状态，不检测深色模式，也不判断对比度；已定义的 `--dsw-alias-*` 变量优先于传入的私有属性，因此生效配色仍由消费方负责。
+- **颜色覆盖使用保守语法**——只有十六进制、颜色名与所列函数中同时被引擎接受的值才会生效，其余一律跳过；因此不支持所列函数的引擎会悄然保留样式表默认值。
 
 <a id="dev-note"></a>
 ### 开发备注
